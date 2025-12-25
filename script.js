@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Data ---
+    // --- Data Configuration ---
     const categories = [
         { name: 'الكل', icon: '🔍', active: true },
         { name: 'سيارات', icon: '🚗', active: false },
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { name: 'وظائف', icon: '💼', active: false }
     ];
 
-    let ads = [
+    const defaultAds = [
         {
             id: 1,
             title: 'آيفون 13 برو ماكس بحالة ممتازة',
@@ -53,6 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     ];
 
+    // Load ads from localStorage or use defaults
+    let ads = JSON.parse(localStorage.getItem('ads')) || defaultAds;
+    // Ensure we save defaults if nothing was there
+    if (!localStorage.getItem('ads')) {
+        localStorage.setItem('ads', JSON.stringify(ads));
+    }
+
     // --- Elements ---
     const adsGrid = document.getElementById('adsGrid');
     const categoriesContainer = document.getElementById('categoriesContainer');
@@ -61,6 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeModalBtn = document.getElementById('closeModalBtn');
     const adForm = document.getElementById('adForm');
     const searchInput = document.getElementById('searchInput');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const uploadPrompt = document.getElementById('uploadPrompt');
+    const removeImageBtn = document.getElementById('removeImage');
+    const toast = document.getElementById('toast');
+
+    let currentUploadedImage = null;
 
     // --- Functions ---
 
@@ -77,15 +91,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render Ads
     function renderAds(adsToRender) {
         if (adsToRender.length === 0) {
-            adsGrid.innerHTML = `<div class="col-span-full text-center py-20 text-gray-500">لا توجد إعلانات مطابقة لبحثك 😔</div>`;
+            adsGrid.innerHTML = `<div class="col-span-full text-center py-20 text-gray-500">
+                <p class="text-4xl mb-2">😔</p>
+                <p>لا توجد إعلانات مطابقة لبحثك</p>
+            </div>`;
             return;
         }
 
         adsGrid.innerHTML = adsToRender.map(ad => `
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition duration-300 group cursor-pointer">
-                <div class="relative h-48 overflow-hidden bg-gray-200">
+                <div class="relative h-48 overflow-hidden bg-gray-100">
                     <img src="${ad.image}" alt="${ad.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
                     <span class="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-md">${ad.time}</span>
+                    <span class="absolute top-2 left-2 bg-white bg-opacity-90 text-indigo-600 text-xs font-bold px-2 py-1 rounded-full">${ad.category}</span>
                 </div>
                 <div class="p-4">
                     <div class="flex justify-between items-start mb-2">
@@ -101,15 +119,52 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
+    function showToast() {
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        setTimeout(() => {
+            toast.classList.add('translate-y-20', 'opacity-0');
+        }, 3000);
+    }
+
+    function resetForm() {
+        adForm.reset();
+        currentUploadedImage = null;
+        imagePreview.classList.add('hidden');
+        uploadPrompt.classList.remove('hidden');
+        imagePreview.querySelector('img').src = '';
+    }
+
     // --- Event Handlers ---
+
+    // Image Upload Preview
+    imageInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentUploadedImage = e.target.result;
+                imagePreview.querySelector('img').src = currentUploadedImage;
+                imagePreview.classList.remove('hidden');
+                uploadPrompt.classList.add('hidden');
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    removeImageBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        imageInput.value = '';
+        currentUploadedImage = null;
+        imagePreview.classList.add('hidden');
+        uploadPrompt.classList.remove('hidden');
+    });
 
     // Filter Logic
     window.filterByCategory = (categoryName) => {
-        // Update active state
         categories.forEach(c => c.active = c.name === categoryName);
         renderCategories();
 
-        // Filter ads
         if (categoryName === 'الكل') {
             renderAds(ads);
         } else {
@@ -137,7 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.classList.add('hidden');
     });
 
-    // Close modal on outside click
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             modal.classList.add('hidden');
@@ -149,6 +203,17 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         
         const formData = new FormData(adForm);
+        
+        // Default image fallback based on category
+        let finalImage = currentUploadedImage;
+        if (!finalImage) {
+            const cat = formData.get('category');
+            if (cat === 'سيارات') finalImage = 'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&q=80&w=400';
+            else if (cat === 'عقارات') finalImage = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&q=80&w=400';
+            else if (cat === 'إلكترونيات') finalImage = 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=400';
+            else finalImage = 'https://images.unsplash.com/photo-1511556820780-d912e42b4980?auto=format&fit=crop&q=80&w=400';
+        }
+
         const newAd = {
             id: Date.now(),
             title: formData.get('title'),
@@ -156,23 +221,23 @@ document.addEventListener('DOMContentLoaded', () => {
             currency: 'ر.س',
             location: formData.get('location') || 'غير محدد',
             time: 'الآن',
-            // Random placeholder image based on category
-            image: `https://source.unsplash.com/random/400x300/?${formData.get('category') === 'سيارات' ? 'car' : 'product'}`,
+            image: finalImage,
             category: formData.get('category')
         };
 
-        // Fallback for image if unsplash source is tricky (using simple logic)
-        if (newAd.category === 'سيارات') newAd.image = 'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&q=80&w=400';
-        else if (newAd.category === 'عقارات') newAd.image = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&q=80&w=400';
-        else newAd.image = 'https://images.unsplash.com/photo-1511556820780-d912e42b4980?auto=format&fit=crop&q=80&w=400';
-
+        // Add to list and save to localStorage
         ads.unshift(newAd);
+        localStorage.setItem('ads', JSON.stringify(ads));
+        
+        // Refresh view
         renderAds(ads);
         
-        adForm.reset();
+        // Cleanup
+        resetForm();
         modal.classList.add('hidden');
+        showToast();
         
-        // Switch to 'All' or the specific category to see the new ad
+        // Switch to 'All' to see result
         window.filterByCategory('الكل');
     });
 
